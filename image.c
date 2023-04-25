@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <string.h>
-#include <pthread.h>
+#include <omp.h>
 #include "image.h"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -11,7 +11,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-int thread_count;
+
 //An array of kernel matrices to be used for image convolution.  
 //The indexes of these match the enumeration from the header file. ie. algorithms[BLUR] returns the kernel corresponding to a box blur.
 Matrix algorithms[]={
@@ -23,13 +23,6 @@ Matrix algorithms[]={
     {{0,0,0},{0,1,0},{0,0,0}}
 };
 
-
-struct convoluteArgs{
-    Image* srcImage;
-    Image* destImage;
-    enum KernelTypes algorithm;
-    long rank;
-};
 
 //getPixelValue - Computes the value of a specific pixel on a specific channel using the selected convolution kernel
 //Paramters: srcImage:  An Image struct populated with the image being convoluted
@@ -77,26 +70,23 @@ enum KernelTypes GetKernelType(char* type){
 //            destImage: A pointer to a  pre-allocated (including space for the pixel array) structure to receive the convoluted image.  It should be the same size as srcImage
 //            algorithm: The kernel matrix to use for the convolution
 //Returns: Nothing
-void* convolute(void* args){
-    struct convoluteArgs* castargs = args;
-    Image* srcImage = castargs->srcImage;
-    Image* destImage = castargs->destImage;
-    enum KernelTypes alg = castargs->algorithm;
-    long rank = castargs->rank;
-    long start_row = rank * 10;
-    long end_row = rank * 11 - 1;
-    if (end_row > srcImage->height) {
-        end_row = rank * 10 + srcImage->height%10;
-    }
+void convolute(Image* srcImage,Image* destImage,Matrix algorithm){
+    int rank = omp_get_thread_num();
+    int num_threads = omp_get_num_threads();
+    int row_count = srcImage->height / num_threads;
+    long start_row = rank * row_count;
+    long end_row = start_row + row_count - 1;
+    // if (end_row > srcImage->height) {
+    //     end_row = rank * row_count + srcImage->height%row_count;
+    // }
     int pix,bit,span;
     span=srcImage->bpp*srcImage->bpp;
     for (int row = start_row; row < end_row; row++) {
         for (pix=0;pix<srcImage->width;pix++){
             for (bit=0;bit<srcImage->bpp;bit++){
-                destImage->data[Index(pix,row,srcImage->width,bit,srcImage->bpp)]=getPixelValue(srcImage,pix,row,bit,algorithms[alg]);
+                destImage->data[Index(pix,row,srcImage->width,bit,srcImage->bpp)]=getPixelValue(srcImage,pix,row,bit,algorithm);
             }
     }}
-    free(castargs);
 }
 
 //Usage: Prints usage information for the program
@@ -113,7 +103,6 @@ int Usage(){
 int main(int argc,char** argv){
     long t1,t2;
     t1=time(NULL);
-
     stbi_set_flip_vertically_on_load(0); 
     if (argc!=3) return Usage();
     char* fileName=argv[1];
@@ -128,26 +117,15 @@ int main(int argc,char** argv){
         printf("Error loading file %s.\n",fileName);
         return -1;
     }
-    long thread;
-    pthread_t* thread_handles;
-    thread_count = srcImage.height/10;
-    thread_handles = (pthread_t*)malloc(thread_count*sizeof(pthread_t));
     
     destImage.bpp=srcImage.bpp;
     destImage.height=srcImage.height;
     destImage.width=srcImage.width;
     destImage.data=malloc(sizeof(uint8_t)*destImage.width*destImage.bpp*destImage.height);
-    for (thread=0; thread<thread_count; thread++) {
-        struct convoluteArgs* args = malloc(sizeof(struct convoluteArgs));
-        args->srcImage = &srcImage;
-        args->destImage = &destImage;
-        args->algorithm =  type;
-        args->rank = thread;
-        pthread_create(&thread_handles[thread], NULL, &convolute,(void*) args);
-    }
-    for (thread=0; thread< thread_count; thread++) {
-        pthread_join(thread_handles[thread],NULL);
-    }
+    
+    # pragma omp parallel num_threads(100)
+    convolute(&srcImage,&destImage,algorithms[type]);
+    
     stbi_write_png("output.png",destImage.width,destImage.height,destImage.bpp,destImage.data,destImage.bpp*destImage.width);
     stbi_image_free(srcImage.data);
     
