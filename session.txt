@@ -1,0 +1,20 @@
+Script started on Mon 24 Apr 2023 11:56:43 PM EDT
+[(ea-cisc372:menglert)@login01.darwin CISC372_picProjertition=standardasks=1 --cpus-per-task=4 --pa
+salloc: Granted job allocation 3991212
+salloc: Waiting for resource configuration
+salloc: Nodes r1n03 are ready for job
+[menglert@r1n03 CISC372_picProject]$ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+[menglert@r1n03 CISC372_picProject]$ srun image
+Usage: image <filename> <type>
+        where type is one of (edge,sharpen,blur,gauss,emboss,identity)
+srun: error: r1n03: task 0: Exited with exit code 255
+[menglert@r1n03 CISC372_picProject]$ srun image pic1.jpg edge
+Took 7 seconds
+[menglert@r1n03 CISC372_picProject]$ srun image pic1.jppg edge
+Took 10 seconds
+[menglert@r1n03 CISC372_picProject]$ logout
+salloc: Relinquishing job allocation 3991212
+[(ea-cisc372:menglert)@login01.darwin CISC372_picProject]$ exit
+
+Script done on Mon 24 Apr 2023 11:58:36 PM EDT
+[(ea-cisc372:menglert)@login01.darwin CISC372_picProject]$
